@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BodyPulse — панель показателей тела</title>
+<style>
+  :root {
+    --bg: #08080f;
+    --bg-2: #0d0d1a;
+    --card: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.08);
+    --text: #eaeefc;
+    --text-dim: #9aa3bd;
+    --accent: #6d5dfc;
+    --accent-2: #00e0c6;
+    --accent-3: #ff5c8a;
+    --gold: #ffc86b;
+    --radius: 20px;
+    --shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* —— animated aurora background —— */
+  .aurora {
+    position: fixed; inset: 0; z-index: -2;
+    background:
+      radial-gradient(60% 50% at 15% 10%, rgba(109,93,252,0.28), transparent 60%),
+      radial-gradient(50% 45% at 85% 20%, rgba(0,224,198,0.22), transparent 60%),
+      radial-gradient(55% 50% at 70% 90%, rgba(255,92,138,0.20), transparent 60%),
+      var(--bg);
+  }
+  .aurora::before, .aurora::after {
+    content: ''; position: absolute; width: 60vmax; height: 60vmax;
+    border-radius: 50%; filter: blur(90px); opacity: .35;
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  .aurora::before {
+    background: radial-gradient(circle, rgba(109,93,252,.8), transparent 70%);
+    top: -20vmax; left: -15vmax;
+  }
+  .aurora::after {
+    background: radial-gradient(circle, rgba(0,224,198,.7), transparent 70%);
+    bottom: -25vmax; right: -15vmax; animation-delay: -13s;
+  }
+  @keyframes drift {
+    from { transform: translate(0,0) scale(1); }
+    to   { transform: translate(6vmax, 4vmax) scale(1.15); }
+  }
+
+  .grain {
+    position: fixed; inset: 0; z-index: -1; opacity: .04; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header { text-align: center; margin-bottom: 44px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent-2);
+    background: rgba(0,224,198,0.08);
+    border: 1px solid rgba(0,224,198,0.25); padding: 6px 16px;
+    border-radius: 100px; margin-bottom: 18px;
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
+  h1 { font-size: clamp(34px, 6vw, 60px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; margin-bottom: 14px; }
+  .grad-text {
+    background: linear-gradient(120deg, var(--accent), var(--accent-2) 45%, var(--accent-3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { color: var(--text-dim); font-size: 16px; max-width: 560px; margin: 0 auto; line-height: 1.6; }
+
+  .grid { display: grid; grid-template-columns: 380px 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: var(--shadow);
+  }
+.input-panel { padding: 30px; position: sticky; top: 24px; }
+  @media (max-width: 900px) { .input-panel { position: static; } }
+  .input-panel h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .input-panel .hint { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; }
+
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .field label .unit { color: var(--accent-2); font-weight: 700; }
+
+  .input-wrap {
+    position: relative; display: flex; align-items: center;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px; padding: 12px 14px;
+    transition: border-color .25s, box-shadow .25s;
+  }
+  .input-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(109,93,252,0.18), 0 0 20px rgba(109,93,252,0.15);
+  }
+  .input-wrap input {
+    background: transparent; border: none; outline: none; color: var(--text);
+    font-size: 18px; font-weight: 700; width: 100%; font-family: inherit;
+  }
+  .input-wrap input::placeholder { color: #4c5570; font-weight: 500; }
+  .input-wrap svg { width: 20px; height: 20px; margin-right: 10px; color: var(--text-dim); flex-shrink: 0; }
+
+  .segmented {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px; padding: 6px;
+  }
+  .segmented button {
+    border: none; background: transparent; color: var(--text-dim);
+    font-size: 14px; font-weight: 700; font-family: inherit;
+    padding: 11px; border-radius: 10px; cursor: pointer; transition: all .25s;
+  }
+  .segmented button.active {
+    background: linear-gradient(120deg, var(--accent), #7a6dff);
+    color: #fff; box-shadow: 0 6px 20px rgba(109,93,252,0.35);
+  }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 380px) { .duo { grid-template-columns: 1fr; } }
+
+  select {
+    width: 100%; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px; padding: 13px 14px; color: var(--text);
+    font-size: 15px; font-weight: 600; font-family: inherit; outline: none; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239aa3bd' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    transition: border-color .25s, box-shadow .25s;
+  }
+  select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,93,252,0.18); }
+
+  .cta {
+    width: 100%; border: none; cursor: pointer; font-family: inherit;
+    font-size: 16px; font-weight: 800; letter-spacing: 0.5px;
+    color: #fff; padding: 16px; border-radius: 16px; margin-top: 8px;
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    background-size: 200% 200%;
+    animation: slideGrad 5s ease-in-out infinite;
+    box-shadow: 0 12px 34px rgba(109,93,252,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(109,93,252,0.55); }
+  .cta:active { transform: translateY(0); }
+  @keyframes slideGrad { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+.hero-panel { padding: 30px; overflow: hidden; }
+  .results.hidden { display: none; }
+
+  .r-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
+  .r-head h2 { font-size: 20px; font-weight: 800; }
+  .chip-score {
+    font-size: 14px; font-weight: 800; padding: 8px 16px; border-radius: 100px;
+    background: var(--card); border: 1px solid var(--card-border);
+  }
+
+  .overview { display: grid; grid-template-columns: 220px 1fr; gap: 26px; align-items: center; margin-bottom: 28px; }
+  @media (max-width: 640px) { .overview { grid-template-columns: 1fr; text-align: center; justify-items:center; } }
+
+  .donut-wrap { position: relative; width: 200px; height: 200px; }
+  .donut-wrap svg { transform: rotate(-90deg); }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut-center .num { font-size: 40px; font-weight: 800; line-height: 1; }
+  .donut-center .lab { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; margin-top: 6px; text-transform: uppercase; }
+
+  .overview-stats { display: grid; gap: 12px; }
+  .o-stat {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-radius: 14px;
+    background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06);
+  }
+  .o-stat .k { font-size: 13px; color: var(--text-dim); }
+  .o-stat .v { font-size: 16px; font-weight: 800; }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 28px; }
+  @media (max-width: 640px) { .metric-grid { grid-template-columns: 1fr; } }
+  .m-card {
+    padding: 20px; border-radius: 16px;
+    background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.07);
+    position: relative; overflow: hidden; transition: transform .25s, border-color .25s;
+  }
+  .m-card:hover { transform: translateY(-3px); border-color: rgba(109,93,252,0.4); }
+  .m-card .m-ico { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+  .m-card .m-ico svg { width: 20px; height: 20px; }
+  .m-card .m-label { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .m-card .m-value { font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .m-card .m-sub { font-size: 12px; margin-top: 6px; font-weight: 600; }
+  .m-card .m-bar { height: 6px; border-radius: 100px; background: rgba(255,255,255,0.08); margin-top: 12px; overflow: hidden; }
+  .m-card .m-bar span { display: block; height: 100%; border-radius: 100px; width: 0; transition: width 1s cubic-bezier(.22,1,.36,1); }
+
+  .insights h3 { font-size: 15px; font-weight: 800; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .insight-list { display: grid; gap: 10px; }
+  .insight {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 16px; border-radius: 14px;
+    background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.05);
+    animation: popIn .5s both;
+  }
+  .insight .ic { flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .insight .tx b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .insight .tx span { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+  .empty {
+    min-height: 420px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; color: var(--text-dim);
+  }
+  .empty svg { width: 90px; height: 90px; opacity: .35; margin-bottom: 20px; }
+  .empty h3 { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+  .empty p { max-width: 320px; font-size: 14px; line-height: 1.6; }
+
+  @keyframes popIn { from { opacity:0; transform: translateY(8px);} to { opacity:1; transform:none; } }
+
+  .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #5a6280; line-height: 1.7; }
+  .footer b { color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<div class="grain"></div>
+
+<div class="wrap">
+  <header>
+    <div class="badge"><span class="dot"></span> Body Intelligence · 2026</div>
+    <h1><span class="grad-text">BodyPulse</span></h1>
+    <p class="sub">Введите три параметра — получите комплексный анализ состава тела, метаболизма и рисков для здоровья.</p>
+  </header>
+
+  <div class="grid">
+    <!-- INPUTS -->
+    <div class="card input-panel">
+      <h2>⚡ Введите данные</h2>
+      <p class="hint">Измерения помогут точнее рассчитать показатели</p>
+
+      <div class="field">
+        <label>Пол</label>
+        <div class="segmented" id="genderSeg">
+          <button type="button" data-g="male" class="active">Мужской</button>
+          <button type="button" data-g="female">Женский</button>
+        </div>
+      </div>
+
+      <div class="duo">
+        <div class="field">
+          <label>Рост <span class="unit">см</span></label>
+          <div class="input-wrap">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 100-16 8 8 0 000 16z"/><path d="M12 8v4l2.5 2.5"/></svg>
+            <input id="height" type="number" inputmode="decimal" placeholder="170" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Вес <span class="unit">кг</span></label>
+          <div class="input-wrap">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 00-3 3v2H7a2 2 0 00-2 2v9a2 2 0 002 2h10a2 2 0 002-2v-9a2 2 0 00-2-2h-2V6a3 3 0 00-3-3z"/><path d="M9 8h6"/></svg>
+            <input id="weight" type="number" inputmode="decimal" placeholder="70" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Объём талии <span class="unit">см</span></label>
+        <div class="input-wrap">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6a8 2 0 018 0"/><path d="M6 6c-1.5 1-2.5 3-3 6 2 1.5 4 2.5 6 2.5 2 0 4-1 6-2.5 2.5 0 5 .5 7 2.5m0 0c-.5 3-1.5 5-3 6m3-6h-6"/></svg>
+          <input id="waist" type="number" inputmode="decimal" placeholder="80" />
+        </div>
+      </div>
+
+      <div class="duo">
+        <div class="field">
+          <label>Возраст <span class="unit">лет</span></label>
+          <div class="input-wrap">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+            <input id="age" type="number" inputmode="numeric" placeholder="30" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Активность</label>
+          <select id="activity">
+            <option value="1.2">Сидячий</option>
+            <option value="1.375">Лёгкая</option>
+            <option value="1.55" selected>Умеренная</option>
+            <option value="1.725">Высокая</option>
+            <option value="1.9">Спортсмен</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="cta" id="calcBtn">Рассчитать показатели →</button>
+    </div>
+<!-- RESULTS -->
+    <div class="card hero-panel">
+      <div class="empty" id="emptyState">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M17 12a5 5 0 01-10 0l2 0a3 3 0 006 0l2 0z"/><circle cx="12" cy="7" r="2"/><path d="M12 9v8"/></svg>
+        <h3>Ждём ваших данных</h3>
+        <p>Заполните поля слева и нажмите «Рассчитать показатели», чтобы получить полный анализ вашего тела.</p>
+      </div>
+
+      <div class="results hidden" id="results">
+        <div class="r-head">
+          <h2>Ваши показатели</h2>
+          <div class="chip-score" id="overallChip"></div>
+        </div>
+
+        <div class="overview">
+          <div class="donut-wrap">
+            <svg width="200" height="200" viewBox="0 0 200 200">
+              <defs>
+                <linearGradient id="donutGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#6d5dfc" />
+                  <stop offset="100%" stop-color="#00e0c6" />
+                </linearGradient>
+                <linearGradient id="donutWarn" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#ff5c8a" />
+                  <stop offset="100%" stop-color="#ffc86b" />
+                </linearGradient>
+              </defs>
+              <circle cx="100" cy="100" r="82" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="16"/>
+              <circle id="donutArc" cx="100" cy="100" r="82" fill="none"
+                stroke="url(#donutGrad)" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="515.2" stroke-dashoffset="515.2"
+                style="transition: stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1);"/>
+            </svg>
+            <div class="donut-center">
+              <div class="num" id="bmiNum">—</div>
+              <div class="lab">ИМТ</div>
+            </div>
+          </div>
+
+          <div class="overview-stats">
+            <div class="o-stat"><span class="k">Категория ИМТ</span><span class="v" id="bmiCat">—</span></div>
+            <div class="o-stat"><span class="k">Идеальный вес</span><span class="v" id="idealW">—</span></div>
+            <div class="o-stat"><span class="k">Процент жира</span><span class="v" id="bfPct">—</span></div>
+            <div class="o-stat"><span class="k">Метаболизм (BMR)</span><span class="v" id="bmrV">—</span></div>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="m-card">
+            <div class="m-ico" style="background:rgba(109,93,252,.15);color:#8b7dff"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 20h12M8 20V9m4 11V4m4 16V9"/></svg></div>
+            <div class="m-label">Соотношение талия/рост</div>
+            <div class="m-value" id="whtrV">—</div>
+            <div class="m-sub" id="whtrSub">—</div>
+            <div class="m-bar"><span id="whtrBar" style="background:linear-gradient(90deg,#00e0c6,#6d5dfc)"></span></div>
+          </div>
+
+          <div class="m-card">
+            <div class="m-ico" style="background:rgba(0,224,198,.15);color:#00e0c6"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 3s6 5.5 6 10a6 6 0 01-12 0c0-4.5 6-10 6-10z"/></svg></div>
+            <div class="m-label">Индекс формы тела</div>
+            <div class="m-value" id="absiV">—</div>
+            <div class="m-sub" id="absiSub">—</div>
+            <div class="m-bar"><span id="absiBar" style="background:linear-gradient(90deg,#ff5c8a,#6d5dfc)"></span></div>
+          </div>
+
+          <div class="m-card">
+            <div class="m-ico" style="background:rgba(255,200,107,.15);color:#ffc86b"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 3v18"/><path d="M16 7h-4a3 3 0 000 6h4a3 3 0 010 6h-4"/><path d="M8 7h1.5"/></svg></div>
+            <div class="m-label">Суточная калорийность</div>
+            <div class="m-value" id="tdeeV">—</div>
+            <div class="m-sub" id="tdeeSub">ккал / день (поддержание веса)</div>
+            <div class="m-bar"><span id="tdeeBar" style="background:linear-gradient(90deg,#ffc86b,#ff5c8a)"></span></div>
+          </div>
+
+          <div class="m-card">
+            <div class="m-ico" style="background:rgba(255,92,138,.15);color:#ff5c8a"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 2v6M12 16v6M2 12l6 0M16 12l6 0"/><circle cx="12" cy="12" r="5"/></svg></div>
+            <div class="m-label">Z-score ИМТ (отклонение)</div>
+            <div class="m-value" id="zscoreV">—</div>
+            <div class="m-sub" id="zscoreSub">—</div>
+            <div class="m-bar"><span id="zscoreBar" style="background:linear-gradient(90deg,#6d5dfc,#00e0c6)"></span></div>
+          </div>
+        </div>
+
+        <div class="insights">
+          <h3>🧠 Анализ и рекомендации</h3>
+          <div class="insight-list" id="insights"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">
+    <b>BodyPulse</b> · Расчёты основаны на формулах Миффлина-Сан Жеора, методе ВМФ США (Navy method),<br/>
+    формулах WHtR и ABSI. Результаты носят информационный характер и не заменяют консультацию врача.
+  </p>
+</div>
+
+<script>
+  const seg = document.getElementById('genderSeg');
+  let gender = 'male';
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    gender = btn.dataset.g;
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  });
+
+  document.getElementById('calcBtn').addEventListener('click', calculate);
+  document.querySelectorAll('.input-wrap input').forEach(inp => {
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') calculate(); });
+  });
+
+  function num(id){ const v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : NaN; }
+
+  function calculate(){
+    const h = num('height'), w = num('weight'), waist = num('waist');
+    const age = num('age');
+    const act = parseFloat(document.getElementById('activity').value);
+
+    while (document.getElementById('insights').lastChild) document.getElementById('insights').lastChild.remove();
+
+    if ([h,w,waist].some(isNaN) || !isFinite(act) || isNaN(age)){ flash(); return; }
+    if (h < 100 || h > 250) return flash('Рост: от 100 до 250 см');
+    if (w < 20 || w > 400) return flash('Вес: от 20 до 400 кг');
+    if (waist < 40 || waist > 250) return flash('Талия: от 40 до 250 см');
+    if (age < 10 || age > 100) return flash('Возраст: от 10 до 100 лет');
+
+    const hm = h / 100;
+    const bmi = w / (hm * hm);
+
+    // body fat (Deurenberg + waist correction)
+    const bfRaw = (1.20 * bmi) + (0.23 * age) - (10.8 * (gender==='male'?1:0)) - 5.4;
+    const waNorm = (waist/h) / (gender==='male'?0.45:0.40);
+    const bf = Math.max(3, Math.min(60, bfRaw + (waNorm-1)*6));
+    render(bmi, bf, waist, h, w, age, gender, hm);
+  }
+
+  function render(bmi, bf, waist, h, w, age, g, hm){
+    document.getElementById('emptyState').style.display = 'none';
+    const res = document.getElementById('results');
+    res.classList.remove('hidden');
+
+    const arcLen = 515.2;
+    const off = arcLen * (1 - Math.max(0, Math.min(40, bmi))/40);
+    document.getElementById('bmiNum').textContent = bmi.toFixed(1);
+    const arc = document.getElementById('donutArc');
+    setTimeout(()=>{ arc.style.strokeDashoffset = off; }, 50);
+    const healthy = bmi >= 18.5 && bmi <= 24.9;
+    arc.setAttribute('stroke', healthy ? 'url(#donutGrad)' : 'url(#donutWarn)');
+
+    const whtr = waist / h;
+    const waM = waist/100;
+    const absi = waM / (Math.pow(bmi, 2/3) * Math.pow(hm, 0.5));
+    const absiZ = (absi - (g==='male'?0.0786:0.0798)) / (g==='male'?0.0079:0.0083);
+    const idealBase = g==='male' ? 50 + 0.92*(h-152.4) : 45.5 + 0.92*(h-152.4);
+    const iLow = idealBase*0.92, iHigh = idealBase*1.08;
+    const bmr = 10*w + 6.25*h - 5*age + (g==='male'?5:-161);
+    const tdee = bmr * parseFloat(document.getElementById('activity').value);
+
+    const cat = bmiCat(bmi);
+    const catColors = { 'Недостаток веса':'#ffc86b','Норма':'#00e0c6','Избыточный вес':'#ffc86b','Ожирение I':'#ff5c8a','Ожирение II':'#ff5c8a','Ожирение III':'#ff3b5c' };
+    setText('bmiCat', cat, catColors[cat]);
+    setText('idealW', Math.round(iLow)+'–'+Math.round(iHigh)+' кг', null);
+    setText('bfPct', bf.toFixed(1)+'%', null);
+    setText('bmrV', Math.round(bmr).toLocaleString('ru')+' ккал', null);
+    setText('tdeeV', Math.round(tdee).toLocaleString('ru'), null);
+
+    setText('whtrV', whtr.toFixed(2), null);
+    setSub('whtrSub','whtrBar', whtrStatus(whtr), whtr/0.7);
+
+    setText('absiV', absi.toFixed(3), null);
+    setSub('absiSub','absiBar', absiCat(absiZ), Math.max(0, Math.min(1,(absiZ+3)/6)));
+
+    const zsc = (bmi - 22)/5.5;
+    setText('zscoreV', (zsc>=0?'+':'')+zsc.toFixed(2), (Math.abs(zsc)<=1?'#00e0c6':'#ff5c8a'));
+    setSub('zscoreSub','zscoreBar', {label:(Math.abs(zsc)<=1?'В норме':(zsc>1?'Выше оптимума':'Ниже нормы')), good: Math.abs(zsc)<=1}, Math.max(0,Math.min(1,(zsc+3)/6)));
+
+    const ov = overallScore(bmi, whtr, bf, g);
+    const chip = document.getElementById('overallChip');
+    chip.textContent = ov.label;
+    chip.style.background = ov.bg;
+    chip.style.color = '#0b0b14';
+    chip.style.borderColor = 'transparent';
+
+    buildInsights(bmi, bf, whtr, absiZ, tdee, bmr, iLow, iHigh, w, g, hm, waist);
+  }
+
+  function setText(id, val, color){
+    const el = document.getElementById(id);
+    el.textContent = val;
+    if (color) el.style.color = color;
+  }
+  function setSub(subId, barId, status, fraction){
+    document.getElementById(subId).textContent = status.label;
+    document.getElementById(subId).style.color = status.good ? '#00e0c6' : '#ffc86b';
+    const bar = document.getElementById(barId);
+    setTimeout(()=>{ bar.style.width = Math.max(8, Math.min(100, fraction*100))+'%'; }, 80);
+  }
+
+  function bmiCat(b){
+    if (b<18.5) return 'Недостаток веса';
+    if (b<25) return 'Норма';
+    if (b<30) return 'Избыточный вес';
+    if (b<35) return 'Ожирение I';
+    if (b<40) return 'Ожирение II';
+    return 'Ожирение III';
+  }
+  function whtrStatus(r){
+    if (r<0.40) return {label:'Очень стройное', good:true};
+    if (r<0.46) return {label:'Отличное соотношение', good:true};
+    if (r<0.53) return {label:'Нормальная зона', good:true};
+    if (r<0.60) return {label:'Умеренный риск', good:false};
+    return {label:'Высокий риск', good:false};
+  }
+  function absiCat(z){
+    if (z<-0.868) return {label:'Низкий риск', good:true};
+    if (z<-0.272) return {label:'Пониженный риск', good:true};
+    if (z<0.229) return {label:'Усреднённый риск', good:true};
+    if (z<0.798) return {label:'Повышенный риск', good:false};
+    return {label:'Высокий риск', good:false};
+  }
+  function overallScore(bmi, whtr, bf, g){
+    const bmiOk = bmi>=18.5 && bmi<25;
+    const whtrOk = whtr < 0.53;
+    const bfOk = bf <= (g==='male'?23:33);
+    const good = [bmiOk,whtrOk,bfOk].filter(Boolean).length;
+    if (good===3) return {label:'● Отличная форма', bg:'linear-gradient(120deg,#00e0c6,#6d5dfc)'};
+    if (good===2) return {label:'● Хорошая форма', bg:'linear-gradient(120deg,#a8ff78,#78ffd6)'};
+    if (good===1) return {label:'▲ Требует внимания', bg:'linear-gradient(120deg,#ffc86b,#ff5c8a)'};
+    return {label:'◆ Зона риска', bg:'linear-gradient(120deg,#ff5c8a,#ff3b5c)'};
+  }
+function buildInsights(bmi, bf, whtr, absiZ, tdee, bmr, iLow, iHigh, w, g, hm, waist){
+    const list = document.getElementById('insights');
+    const items = [];
+    const idealMid = (iLow+iHigh)/2;
+    const diff = w - idealMid;
+    if (Math.abs(diff) > idealMid*0.05){
+      items.push({ icon: diff>0?'⚖️':'📈', bg: diff>0?'rgba(255,200,107,.18)':'rgba(0,224,198,.16)',
+        title: (diff>0?'Выше идеального на ':'Ниже идеального на ')+Math.abs(diff).toFixed(1)+' кг',
+        text: 'Ориентир здоровой зоны — '+Math.round(iLow)+'–'+Math.round(iHigh)+' кг. Оптимальный дефицит 300–500 ккал/день даёт около 0,3–0,5 кг в неделю.' });
+    } else {
+      items.push({ icon:'✅', bg:'rgba(0,224,198,.16)', title:'Вес в здоровом диапазоне', text:'Вы находитесь в зоне идеального веса для вашего роста и пола.' });
+    }
+    const waistIdeal = hm*(g==='male'?0.5:0.48)*100;
+    items.push({ icon: whtr<0.5?'🏅':'⚠️', bg: whtr<0.5?'rgba(0,224,198,.16)':'rgba(255,200,107,.18)',
+      title: whtr<0.5?'Талия в отличной зоне':'Талия выше рекомендуемой',
+      text: 'Оптимальная окружность талии ≈ '+Math.round(waistIdeal)+' см. '+(whtr<0.5?'Это снижает кардиориски.':'Снижение на '+Math.max(0,Math.round(waist-waistIdeal))+' см заметно снижает риски.') });
+    const bl = bfCat(bf,g);
+    items.push({ icon:'🧬', bg:'rgba(109,93,252,.18)', title:'Процент жира: '+bf.toFixed(1)+'% · '+bl.label, text: bl.text });
+    items.push({ icon:'🔥', bg:'rgba(255,92,138,.16)', title:'Метаболизм в покое: '+Math.round(bmr)+' ккал',
+      text:'Для похудения ~'+Math.round(tdee*0.8).toLocaleString('ru')+', поддержания '+Math.round(tdee).toLocaleString('ru')+', набора ~'+Math.round(tdee*1.1).toLocaleString('ru')+' ккал/день.' });
+
+    list.innerHTML = items.map((it,i)=>`
+      <div class="insight" style="animation-delay:${i*0.08}s">
+        <div class="ic" style="background:${it.bg}">${it.icon}</div>
+        <div class="tx"><b>${it.title}</b><span>${it.text}</span></div>
+      </div>`).join('');
+  }
+
+  function bfCat(bf, g){
+    const l = g==='male'?[6,14,18,25,32]:[14,21,25,32,39];
+    if (bf<l[0]) return {label:'Экстремально низкий', text:'Возможен дефицит — следите за состоянием.'};
+    if (bf<=l[1]) return {label:'Спортивный', text:'Атлетичный уровень.'};
+    if (bf<=l[2]) return {label:'Фитнес', text:'Хорошая композиция тела.'};
+    if (bf<l[3]) return {label:'Приемлемый', text:'В пределах нормы.'};
+    if (bf<=l[4]) return {label:'Повышенный', text:'Стоит обратить внимание на питание и активность.'};
+    return {label:'Высокий', text:'Рекомендуется консультация специалиста.'};
+  }
+
+  function flash(msg){
+    const btn = document.getElementById('calcBtn');
+    btn.textContent = msg || '⚠️ Заполните все поля';
+    btn.style.background = 'linear-gradient(120deg,#ff5c8a,#ff3b5c)';
+    setTimeout(()=>{ btn.textContent = 'Рассчитать показатели →'; btn.style.background=''; }, 1600);
+  }
+</script>
+</body>
+</html>
