@@ -9,7 +9,7 @@
 
 ---
 
-## 📸 Скриншот-
+## 📸 Скриншот
 
 ![BodyPulse](docs/screenshot.png)
 
